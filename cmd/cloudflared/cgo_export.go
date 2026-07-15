@@ -10,16 +10,16 @@ package main
 // 日志回调函数类型
 typedef void (*LogCallback)(const char* message);
 
-// 全局日志回调
-static LogCallback g_log_callback = NULL;
+// 全局日志回调（使用 weak 避免多编译单元冲突）
+__attribute__((weak)) LogCallback g_log_callback = NULL;
 
 // 设置日志回调
-void SetLogCallback(LogCallback cb) {
+__attribute__((weak)) void SetLogCallback(LogCallback cb) {
     g_log_callback = cb;
 }
 
 // 发送日志到回调
-void SendLog(const char* msg) {
+__attribute__((weak)) void SendLog(const char* msg) {
     if (g_log_callback != NULL) {
         g_log_callback(msg);
     }
