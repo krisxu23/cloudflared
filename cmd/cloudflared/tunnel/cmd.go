@@ -485,7 +485,7 @@ func StartServer(
 		diagnosticHandler := diagnostic.NewDiagnosticHandler(
 			log,
 			0,
-			diagnostic.NewSystemCollectorImpl(buildInfo.CloudflaredVersion),
+			diagnostic.NewSystemCollectorImpl(info.CloudflaredVersion),
 			tunnelConfig.NamedTunnel.Credentials.TunnelID,
 			connectorID,
 			tracker,
