@@ -141,6 +141,7 @@ func runCloudflared(args []string) {
 	var token string
 	var protocol string = "http2"
 	var edgeIPVersion string = "auto"
+	var logFilePath string
 
 	for i, arg := range args {
 		if arg == "--url" && i+1 < len(args) {
@@ -155,6 +156,9 @@ func runCloudflared(args []string) {
 		}
 		if arg == "--edge-ip-version" && i+1 < len(args) {
 			edgeIPVersion = args[i+1]
+		}
+		if arg == "--logfile" && i+1 < len(args) {
+			logFilePath = args[i+1]
 		}
 	}
 
@@ -180,7 +184,17 @@ func runCloudflared(args []string) {
 	buildInfo := cliutil.GetBuildInfo("cgo", "2025.8.1")
 
 	// 创建日志记录器
-	log := logWriter
+	var log *zerolog.Logger
+	if logWriter != nil {
+		log = logWriter
+	} else if logFilePath != "" {
+		f, fErr := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if fErr == nil {
+			output := zerolog.ConsoleWriter{Out: f, TimeFormat: time.RFC3339}
+			l := zerolog.New(output).With().Timestamp().Logger()
+			log = &l
+		}
+	}
 	if log == nil {
 		output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 		l := zerolog.New(output).With().Timestamp().Logger()
