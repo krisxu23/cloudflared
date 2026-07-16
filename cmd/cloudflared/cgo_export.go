@@ -29,7 +29,9 @@ import "C"
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -156,15 +158,19 @@ func runCloudflared(args []string) {
 		}
 	}
 
-	// 创建 CLI 上下文
+	// 创建 CLI 上下文（需要非 nil FlagSet，否则 Set() 会 panic）
 	app := createApp()
-	cliCtx := cli.NewContext(app, nil, nil)
+	flagSet := flag.NewFlagSet("cloudflared", flag.ContinueOnError)
+	for _, f := range app.Flags {
+		f.Apply(flagSet)
+	}
+	cliCtx := cli.NewContext(app, flagSet, nil)
 	
 	// 设置参数
 	if isTempTunnel {
 		cliCtx.Set("url", tunnelURL)
 	} else if token != "" {
-		cliCtx.Set(tunnel.TunnelTokenFlag, token)
+		cliCtx.Set("token", token)
 	}
 	cliCtx.Set("protocol", protocol)
 	cliCtx.Set("edge-ip-version", edgeIPVersion)
@@ -184,9 +190,21 @@ func runCloudflared(args []string) {
 	// 创建隧道属性
 	var namedTunnel *connection.TunnelProperties
 	if token != "" {
-		// 解析 token 为 credentials
+		// Cloudflare token 是 base64 编码的 JSON，先解码再解析
+		decoded, decErr := base64.StdEncoding.DecodeString(token)
+		if decErr != nil {
+			decoded, decErr = base64.URLEncoding.DecodeString(token)
+		}
+		if decErr != nil {
+			errMsg := fmt.Sprintf("Failed to decode tunnel token: %v", decErr)
+			C.SendLog(C.CString(errMsg))
+			if logWriter != nil {
+				logWriter.Error().Msg(errMsg)
+			}
+			return
+		}
 		tunnelToken := connection.TunnelToken{}
-		if err := json.Unmarshal([]byte(token), &tunnelToken); err != nil {
+		if err := json.Unmarshal(decoded, &tunnelToken); err != nil {
 			errMsg := fmt.Sprintf("Failed to parse tunnel token: %v", err)
 			C.SendLog(C.CString(errMsg))
 			if logWriter != nil {
