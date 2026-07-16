@@ -294,29 +294,32 @@ func createApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "cloudflared"
 	app.Usage = "Cloudflare Tunnel"
+	// 必须注册完整 flag 集，否则 c.Duration/c.Int 对未注册 flag 返回零值 0。
+	// 最致命的是 rpc-timeout=0 → registration_client.go 的 context.WithTimeout(ctx, 0)
+	// 立即过期 → 隧道注册在 1 秒内返回 "context deadline exceeded"。
+	// 以下默认值与官方 cmd/cloudflared/tunnel/cmd.go 的 tunnelFlags() 一致。
 	app.Flags = []cli.Flag{
-		&cli.StringFlag{
-			Name:  "url",
-			Usage: "Origin URL",
-		},
-		&cli.StringFlag{
-			Name:  "token",
-			Usage: "Tunnel token",
-		},
-		&cli.StringFlag{
-			Name:  "protocol",
-			Usage: "Protocol",
-			Value: "http2",
-		},
-		&cli.StringFlag{
-			Name:  "edge-ip-version",
-			Usage: "Edge IP version",
-			Value: "auto",
-		},
-		&cli.BoolFlag{
-			Name:  "no-autoupdate",
-			Usage: "Disable auto update",
-		},
+		&cli.StringFlag{Name: "url"},
+		&cli.StringFlag{Name: "token"},
+		&cli.StringFlag{Name: "protocol", Value: "http2"},
+		&cli.StringFlag{Name: "edge-ip-version", Value: "auto"},
+		&cli.BoolFlag{Name: "no-autoupdate"},
+		// RPC 超时：官方默认 5s。为 0 时 RegisterConnection 立即超时。
+		&cli.DurationFlag{Name: "rpc-timeout", Value: 5 * time.Second},
+		// 并发连接数：官方默认 4。为 0 时只起 1 条连接。
+		&cli.IntFlag{Name: "ha-connections", Value: 4},
+		// 重试次数：官方默认 5。为 0 时首次失败即放弃。
+		&cli.IntFlag{Name: "retries", Value: 5},
+		// 优雅关闭窗口：官方默认 30s。为 0 时无优雅关闭。
+		&cli.DurationFlag{Name: "grace-period", Value: 30 * time.Second},
+		// 边缘 IP 轮换重试：官方默认 8。为 0 时不轮换。
+		&cli.IntFlag{Name: "max-edge-addr-retries", Value: 8},
+		// 心跳：官方默认间隔 5s，心跳计数 5。
+		&cli.DurationFlag{Name: "heartbeat-interval", Value: 5 * time.Second},
+		&cli.IntFlag{Name: "heartbeat-count", Value: 5},
+		// 流控：官方默认 30MB / 6MB
+		&cli.IntFlag{Name: "quic-connection-level-flow-control-limit", Value: 30 * 1024 * 1024},
+		&cli.IntFlag{Name: "quic-stream-level-flow-control-limit", Value: 6 * 1024 * 1024},
 	}
 	return app
 }
