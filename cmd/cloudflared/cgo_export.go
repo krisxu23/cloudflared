@@ -86,11 +86,33 @@ func StartCloudflared(payload *C.char) C.int {
 	// 创建上下文
 	ctx, cancel = context.WithCancel(context.Background())
 
-	// 启动 cloudflared
-	go runCloudflared(p.Args)
+	// 用 channel 传递启动结果
+	// runCloudflared 成功时阻塞在 select 上（不写 channel），失败时写入 error 并 return
+	// StartCloudflared 等待最多 15 秒：收到 error 说明启动失败，超时说明正在后台运行
+	errCh := make(chan error, 1)
+	go runCloudflared(p.Args, errCh)
 
-	running = true
-	return 0
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case err := <-errCh:
+		// runCloudflared 在启动阶段就返回了，说明失败
+		running = false
+		if cancel != nil {
+			cancel()
+		}
+		if err != nil {
+			C.SendLog(C.CString(fmt.Sprintf("cloudflared startup failed: %v", err)))
+		} else {
+			C.SendLog(C.CString("cloudflared exited unexpectedly during startup"))
+		}
+		return -1
+	case <-timer.C:
+		// 15 秒内未返回，说明 cloudflared 正在后台运行
+		running = true
+		return 0
+	}
 }
 
 //export StopCloudflared
@@ -124,7 +146,7 @@ func SetLogFile(path *C.char) {
 	logWriter = &log
 }
 
-func runCloudflared(args []string) {
+func runCloudflared(args []string, errCh chan<- error) {
 	// 设置信号处理
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -247,6 +269,7 @@ func runCloudflared(args []string) {
 		if logWriter != nil {
 			logWriter.Error().Msg(errMsg)
 		}
+		errCh <- err
 		return
 	}
 
