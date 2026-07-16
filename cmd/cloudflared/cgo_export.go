@@ -183,6 +183,12 @@ func runCloudflared(args []string) {
 	// 创建构建信息
 	buildInfo := cliutil.GetBuildInfo("cgo", "2025.8.1")
 
+	// 初始化 tunnel 包全局变量
+	// 正常二进制模式下 main() 会调用 tunnel.Init()，但 cgo 库模式下 main() 不会执行，
+	// 导致 buildInfo 和 graceShutdownC 全局变量为 nil，引发空指针 panic（cmd.go:488）
+	graceShutdownC := make(chan struct{})
+	tunnel.Init(buildInfo, graceShutdownC)
+
 	// 创建日志记录器
 	var log *zerolog.Logger
 	if logWriter != nil {
